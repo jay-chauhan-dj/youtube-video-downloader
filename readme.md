@@ -89,7 +89,7 @@ python youtube.py
 
 1. Run:
    ```bash
-   python youtube_downloader.py
+   python youtube.py
    ```
 2. Enter the **YouTube URL**.
 3. Choose **Video (1)**.
@@ -102,7 +102,7 @@ python youtube.py
 
 1. Run:
    ```bash
-   python youtube_downloader.py
+   python youtube.py
    ```
 2. Enter the **YouTube URL**.
 3. Choose **Audio (2)**.
