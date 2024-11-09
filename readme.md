@@ -140,6 +140,13 @@ pip install -U yt-dlp
 
 Feel free to contribute by opening pull requests or reporting issues.
 
+## 👤 Author Information
+
+**Author**: Jay Chauhan  
+**Website**: [www.dj-jay.in](http://www.dj-jay.in)  
+**Email**: contact@dj-jay.in  
+**Contact Number**: +91 93134 40532
+
 ## 📜 License
 
 This project is licensed under the MIT License.
