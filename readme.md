@@ -56,7 +56,7 @@ This folder is created automatically if it doesn’t exist.
 ### Run the Script
 To start the downloader, run:
 ```bash
-python youtube_downloader.py
+python youtube.py
 ```
 
 ### Download Options
