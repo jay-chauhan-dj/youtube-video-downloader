@@ -1,149 +1,210 @@
-# File path: youtube_downloader.py
-
 import os
-from pytube import YouTube, Playlist
-import shutil
+from yt_dlp import YoutubeDL
 import sys
+from urllib.parse import urlparse, parse_qs
 
-# Default base location for downloads
-BASE_DIR = os.path.expanduser('~/Desktop/Songs')
+# Unicode icons for improved UI
+FOLDER_ICON = "📁"
+CHECK_ICON = "✅"
+BACK_ICON = "🔙"
+PLUS_ICON = "➕"
+VIDEO_ICON = "🎬"
+AUDIO_ICON = "🎧"
+PROGRESS_ICON = "⏳"
+SUCCESS_ICON = "✅"
 
+# Supported file extensions for media files
+AUDIO_EXTENSIONS = {'.mp3', '.wav', '.aac', '.flac', '.m4a'}
+VIDEO_EXTENSIONS = {'.mp4', '.mkv', '.mov', '.flv'}
 
-def list_files_and_folders(directory: str):
-    """List files and folders in the given directory."""
-    print(f"\nListing files and folders in: {directory}")
-    with os.scandir(directory) as entries:
-        for entry in entries:
-            print(f"{'[Folder]' if entry.is_dir() else '[File]'} {entry.name}")
+def list_directories(path):
+    """List all directories in the specified path."""
+    return [d for d in os.listdir(path) if os.path.isdir(os.path.join(path, d))]
 
+def list_media_files(path):
+    """List all audio and video files in the specified path with relevant icons."""
+    media_files = []
+    for filename in os.listdir(path):
+        file_ext = os.path.splitext(filename)[1].lower()
+        if file_ext in AUDIO_EXTENSIONS:
+            media_files.append(f"{AUDIO_ICON} {filename}")
+        elif file_ext in VIDEO_EXTENSIONS:
+            media_files.append(f"{VIDEO_ICON} {filename}")
+    return media_files
 
-def create_folder(directory: str):
-    """Create a new folder in the given directory."""
-    folder_name = input("Enter the name of the new folder: ")
-    new_folder_path = os.path.join(directory, folder_name)
-    try:
-        os.makedirs(new_folder_path, exist_ok=True)
-        print(f"Folder created: {new_folder_path}")
-        return new_folder_path
-    except Exception as e:
-        print(f"Error creating folder: {e}")
-        return directory
-
-
-def select_folder(base_dir: str):
-    """Select an existing folder or create a new one."""
+def get_save_location(base_path):
+    """Navigate folders within the base path and create new folders if needed."""
+    current_path = base_path
     while True:
-        list_files_and_folders(base_dir)
-        choice = input("\nOptions:\n1. Select an existing folder\n2. Create a new folder\n3. Use the current location\n4. Go back\nSelect: ")
-        if choice == '1':
-            folder_name = input("Enter the name of the folder: ")
-            selected_folder = os.path.join(base_dir, folder_name)
-            if os.path.isdir(selected_folder):
-                return selected_folder
-            else:
-                print("Invalid folder name. Try again.")
-        elif choice == '2':
-            return create_folder(base_dir)
-        elif choice == '3':
-            return base_dir
-        elif choice == '4':
-            return None
+        print(f"\n{FOLDER_ICON} Current: {current_path}")
+        media_files = list_media_files(current_path)
+        if media_files:
+            print("\n--- Media Files ---")
+            for file in media_files:
+                print(f" {file}")
+            print("------------------")
         else:
-            print("Invalid choice. Try again.")
+            print("\n(No media files found)")
 
+        directories = list_directories(current_path)
+        print("\n--- Folders ---")
+        for idx, folder in enumerate(directories):
+            print(f" {idx + 1}. {FOLDER_ICON} {folder}")
+        print(f" {len(directories) + 1}. {PLUS_ICON} New Folder")
+        print(f" {len(directories) + 2}. {BACK_ICON} Parent Folder")
+        print(f" {len(directories) + 3}. {CHECK_ICON} Select Here")
+        print("------------------")
 
-def download_video(youtube_video: YouTube, file_format: str, destination: str):
-    """Download video in the selected format."""
-    print(f"Downloading: {youtube_video.title}")
-    try:
-        # Get video streams matching the file format
-        stream = youtube_video.streams.filter(file_extension=file_format).get_highest_resolution()
-        if stream is None:
-            print(f"No video streams found for the selected format {file_format}")
-            return
-        stream.download(output_path=destination)
-        print("Video download completed!")
-    except Exception as e:
-        print(f"Error downloading video: {e}")
+        try:
+            choice = int(input("Choose a number: "))
+        except ValueError:
+            print("❌ Invalid input, enter a number.")
+            continue
 
-
-def download_audio(youtube_video: YouTube, file_format: str, destination: str):
-    """Download audio in the selected format."""
-    print(f"Downloading: {youtube_video.title}")
-    try:
-        # Fetch audio-only streams and select the first available one
-        stream = youtube_video.streams.filter(only_audio=True).first()
-        
-        if stream is None:
-            print("No audio stream found!")
-            return
-
-        # Download the audio stream
-        out_file = stream.download(output_path=destination)
-
-        # Rename and convert if needed
-        base, ext = os.path.splitext(out_file)
-        new_file = base + f'.{file_format}'
-        
-        # Handle conversion if not mp4 audio (e.g., convert to mp3, wav, etc.)
-        if file_format != 'mp4':
-            shutil.move(out_file, new_file)
-
-        print(f"Audio download completed as {new_file}!")
-    except Exception as e:
-        print(f"Error during audio download: {e}")
-
-
-def get_video_or_audio(url: str, file_type: str, file_format: str, destination: str):
-    """Fetch YouTube video object and handle download based on type."""
-    try:
-        youtube_video = YouTube(url)
-
-        if file_type == "audio":
-            download_audio(youtube_video, file_format, destination)
+        if choice == len(directories) + 1:
+            new_folder_name = input("New folder name: ")
+            new_folder_path = os.path.join(current_path, new_folder_name)
+            os.makedirs(new_folder_path, exist_ok=True)
+            print(f"{CHECK_ICON} Created '{new_folder_name}'")
+            current_path = new_folder_path
+        elif choice == len(directories) + 2:
+            current_path = os.path.dirname(current_path)
+        elif choice == len(directories) + 3:
+            return current_path
+        elif 1 <= choice <= len(directories):
+            current_path = os.path.join(current_path, directories[choice - 1])
         else:
-            download_video(youtube_video, file_format, destination)
-    except Exception as e:
-        print(f"Error fetching YouTube video: {e}")
+            print("❌ Invalid choice, try again.")
 
+def show_progress_bar(d):
+    """Display a progress bar for the download process."""
+    if d['status'] == 'downloading':
+        total = d.get('total_bytes', 0)
+        downloaded = d.get('downloaded_bytes', 0)
+        percentage = (downloaded / total) * 100 if total > 0 else 0
+        bar_length = 30
+        progress = int(percentage / (100 / bar_length))
+        progress_bar = '#' * progress + '-' * (bar_length - progress)
+        sys.stdout.write(f"\r{PROGRESS_ICON} Downloading: [{progress_bar}] {percentage:.2f}%")
+        sys.stdout.flush()
+    elif d['status'] == 'finished':
+        print(f"\n{SUCCESS_ICON} Download complete.")
 
-def main():
-    print("Welcome to the YouTube Downloader!")
+def is_playlist(url):
+    """Check if the URL contains a playlist parameter."""
+    query = parse_qs(urlparse(url).query)
+    return 'list' in query
 
-    # Ask for YouTube URL
-    video_url = input("Enter the YouTube video URL (supports single videos, not full playlists): ")
+def get_unique_filename(path, filename, ext):
+    """Generate a unique filename if a file with the same name already exists."""
+    original_path = os.path.join(path, f"{filename}{ext}")
+    if not os.path.exists(original_path):
+        return original_path  # No conflict, return the original path
 
-    # Check if it's a playlist URL and select the first video
-    if 'playlist' in video_url:
-        playlist = Playlist(video_url)
-        print(f"Playlist detected. Downloading the first video: {playlist.video_urls[0]}")
-        video_url = playlist.video_urls[0]
-
-    # Ask for file type (audio or video)
-    file_type = input("Do you want to download Audio or Video? (type 'audio' or 'video'): ").strip().lower()
-
-    # Ask for file format based on file type
-    if file_type == 'audio':
-        file_format = input("Select audio format (mp3, wav, m4a): ").strip().lower()
-    elif file_type == 'video':
-        file_format = input("Select video format (mp4, mov): ").strip().lower()
+    # If conflict exists, offer to rename or generate a unique filename
+    choice = input("File already exists. Rename manually? (y/n): ").strip().lower()
+    if choice == 'y':
+        new_name = input("Enter new name (without extension): ").strip()
+        return os.path.join(path, f"{new_name}{ext}")
     else:
-        print("Invalid file type. Exiting.")
+        count = 1
+        while True:
+            new_path = os.path.join(path, f"{filename} ({count}){ext}")
+            if not os.path.exists(new_path):
+                return new_path
+            count += 1
+
+def download_youtube_content():
+    """Download YouTube content based on user's choice of video or audio."""
+    base_path = os.path.expanduser("~/Desktop/youtube")
+    if not os.path.exists(base_path):
+        os.makedirs(base_path)
+        print(f"{CHECK_ICON} Created base directory '{base_path}'")
+
+    # Input URL and check if it's a playlist
+    url = input("Enter YouTube URL: ").strip()
+    if not url.startswith("http"):
+        url = "https://" + url
+
+    if is_playlist(url):
+        print("\n📋 This URL is part of a playlist.")
+        playlist_choice = input("Download entire playlist? (y/n): ").strip().lower()
+        if playlist_choice == 'n':
+            url = url.split('&')[0]  # Remove playlist parameters for single video
+
+    # Selection of download type
+    print(f"\n{VIDEO_ICON} Video or {AUDIO_ICON} Audio?")
+    print(" 1. 🎬 Video")
+    print(" 2. 🎧 Audio")
+    choice = input("Choose (1 or 2): ").strip()
+
+    # Set format code based on selection
+    if choice == '1':
+        formats = ['mp4', 'mkv', 'mov', 'flv']
+        print("\n--- Video Formats ---")
+        for idx, fmt in enumerate(formats, start=1):
+            print(f" {idx}. {VIDEO_ICON} {fmt}")
+        print("--------------------")
+        try:
+            format_choice = int(input("Choose format: "))
+            selected_format = formats[format_choice - 1]
+        except (ValueError, IndexError):
+            print("❌ Invalid format choice.")
+            return
+        format_code = f"bestvideo[ext={selected_format}]+bestaudio/best[ext={selected_format}]"
+        file_extension = f".{selected_format}"
+
+    elif choice == '2':
+        formats = ['mp3', 'wav', 'aac', 'flac', 'm4a']
+        print("\n--- Audio Formats ---")
+        for idx, fmt in enumerate(formats, start=1):
+            print(f" {idx}. {AUDIO_ICON} {fmt}")
+        print("--------------------")
+        try:
+            format_choice = int(input("Choose format: "))
+            selected_format = formats[format_choice - 1]
+        except (ValueError, IndexError):
+            print("❌ Invalid format choice.")
+            return
+        format_code = 'bestaudio'
+        file_extension = f".{selected_format}"
+
+    else:
+        print("❌ Invalid choice.")
         return
 
-    # Ensure the base directory exists
-    if not os.path.exists(BASE_DIR):
-        os.makedirs(BASE_DIR)
+    # Choose to keep original name or use custom name with conflict handling
+    use_original_name = input("Keep original name? (y/n): ").strip().lower()
+    save_location = get_save_location(base_path)
+    if use_original_name == 'y':
+        output_template = os.path.join(save_location, "%(title)s.%(ext)s")
+    else:
+        file_name = input("Enter custom file name (without extension): ")
+        output_template = get_unique_filename(save_location, file_name, file_extension)
 
-    # Folder selection process
-    destination = select_folder(BASE_DIR)
-    if destination is None:
-        print("No folder selected. Exiting.")
-        return
+    # yt-dlp options
+    ydl_opts = {
+        'format': format_code,
+        'outtmpl': output_template,
+        'progress_hooks': [show_progress_bar],
+        'quiet': True,
+    }
 
-    # Download the selected file
-    get_video_or_audio(video_url, file_type, file_format, destination)
+    # Add postprocessor for audio conversion
+    if choice == '2':
+        ydl_opts['postprocessors'] = [{
+            'key': 'FFmpegExtractAudio',
+            'preferredcodec': selected_format,
+            'preferredquality': '192',
+        }]
 
+    print(f"\n{PROGRESS_ICON} Downloading...")
+    try:
+        with YoutubeDL(ydl_opts) as ydl:
+            ydl.download([url])
+        print(f"\n{CHECK_ICON} Download complete in '{output_template}'")
+    except Exception as e:
+        print(f"❌ Download failed: {e}")
 
-if __name__ == "__main__":
-    main()
+# Run the main function
+download_youtube_content()
