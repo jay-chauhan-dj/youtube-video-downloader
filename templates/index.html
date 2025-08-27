@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>YouTube Downloader</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        .hidden {
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <div class="container mt-5">
+        <div class="card">
+            <div class="card-header">
+                <h1 class="text-center">YouTube Video Downloader</h1>
+            </div>
+            <div class="card-body">
+                <form id="download-form">
+                    <div class="mb-3">
+                        <label for="url" class="form-label">YouTube URL</label>
+                        <input type="text" class="form-control" id="url" name="url" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Download Type</label>
+                        <div class="form-check">
+                            <input class="form-check-input" type="radio" name="download_type" id="video-radio" value="video" checked>
+                            <label class="form-check-label" for="video-radio">Video</label>
+                        </div>
+                        <div class="form-check">
+                            <input class="form-check-input" type="radio" name="download_type" id="audio-radio" value="audio">
+                            <label class="form-check-label" for="audio-radio">Audio</label>
+                        </div>
+                    </div>
+                    <div id="video-options" class="mb-3">
+                        <label for="video-format" class="form-label">Video Format</label>
+                        <select class="form-select" id="video-format" name="video_format">
+                            <option value="mp4">MP4</option>
+                            <option value="mkv">MKV</option>
+                            <option value="mov">MOV</option>
+                            <option value="flv">FLV</option>
+                        </select>
+                    </div>
+                    <div id="audio-options" class="mb-3 hidden">
+                        <label for="audio-format" class="form-label">Audio Format</label>
+                        <select class="form-select" id="audio-format" name="audio_format">
+                            <option value="mp3">MP3</option>
+                            <option value="wav">WAV</option>
+                            <option value="aac">AAC</option>
+                            <option value="flac">FLAC</option>
+                            <option value="m4a">M4A</option>
+                        </select>
+                    </div>
+                    <div class="mb-3 form-check">
+                        <input type="checkbox" class="form-check-input" id="playlist" name="playlist">
+                        <label class="form-check-label" for="playlist">Download entire playlist (if applicable)</label>
+                    </div>
+                    <div class="mb-3">
+                        <label for="filename" class="form-label">Custom Filename (optional)</label>
+                        <input type="text" class="form-control" id="filename" name="filename" placeholder="Leave blank to use original title">
+                    </div>
+                    <button type="submit" id="submit-btn" class="btn btn-primary">Download</button>
+                </form>
+            </div>
+            <div class="card-footer hidden" id="progress-section">
+                <h5>Download Progress</h5>
+                <div class="progress">
+                    <div id="progress-bar" class="progress-bar" role="progressbar" style="width: 0%;" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100">0%</div>
+                </div>
+                <div id="status" class="mt-2"></div>
+                <a href="#" id="download-link" class="btn btn-success hidden mt-2">Download File</a>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function () {
+            const downloadTypeRadios = document.querySelectorAll('input[name="download_type"]');
+            const videoOptions = document.getElementById('video-options');
+            const audioOptions = document.getElementById('audio-options');
+            const form = document.getElementById('download-form');
+            const submitBtn = document.getElementById('submit-btn');
+            const progressSection = document.getElementById('progress-section');
+            const progressBar = document.getElementById('progress-bar');
+            const statusDiv = document.getElementById('status');
+            const downloadLink = document.getElementById('download-link');
+
+            downloadTypeRadios.forEach(radio => {
+                radio.addEventListener('change', function () {
+                    if (this.value === 'video') {
+                        videoOptions.classList.remove('hidden');
+                        audioOptions.classList.add('hidden');
+                    } else {
+                        videoOptions.classList.add('hidden');
+                        audioOptions.classList.remove('hidden');
+                    }
+                });
+            });
+
+            form.addEventListener('submit', async function (e) {
+                e.preventDefault();
+                submitBtn.disabled = true;
+                submitBtn.innerText = 'Downloading...';
+                progressSection.classList.remove('hidden');
+                downloadLink.classList.add('hidden');
+                progressBar.style.width = '0%';
+                progressBar.innerText = '0%';
+                statusDiv.innerText = 'Starting...';
+
+                const formData = new FormData(form);
+                const data = {
+                    url: formData.get('url'),
+                    download_type: formData.get('download_type'),
+                    video_format: formData.get('video_format'),
+                    audio_format: formData.get('audio_format'),
+                    playlist: formData.has('playlist'),
+                    filename: formData.get('filename')
+                };
+
+                const response = await fetch('/download', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(data)
+                });
+
+                if (!response.ok) {
+                    statusDiv.innerText = 'Error starting download.';
+                    submitBtn.disabled = false;
+                    submitBtn.innerText = 'Download';
+                    return;
+                }
+
+                const result = await response.json();
+                const taskId = result.task_id;
+                pollProgress(taskId);
+            });
+
+            function pollProgress(taskId) {
+                const interval = setInterval(async () => {
+                    const response = await fetch(`/progress/${taskId}`);
+                    if (!response.ok) {
+                        clearInterval(interval);
+                        statusDiv.innerText = 'Error fetching progress.';
+                        submitBtn.disabled = false;
+                        submitBtn.innerText = 'Download';
+                        return;
+                    }
+
+                    const task = await response.json();
+                    statusDiv.innerText = `Status: ${task.status}`;
+
+                    if (task.status === 'downloading' || task.status === 'processing') {
+                        const progress = task.progress || 0;
+                        progressBar.style.width = `${progress}%`;
+                        progressBar.innerText = `${progress}%`;
+                    } else if (task.status === 'finished') {
+                        clearInterval(interval);
+                        progressBar.style.width = '100%';
+                        progressBar.innerText = '100%';
+                        statusDiv.innerText = 'Download complete!';
+                        downloadLink.href = `/file/${taskId}`;
+                        downloadLink.classList.remove('hidden');
+                        submitBtn.disabled = false;
+                        submitBtn.innerText = 'Download';
+                    } else if (task.status === 'error') {
+                        clearInterval(interval);
+                        statusDiv.innerText = `Error: ${task.error}`;
+                        submitBtn.disabled = false;
+                        submitBtn.innerText = 'Download';
+                    }
+                }, 2000); // Poll every 2 seconds
+            }
+        });
+    </script>
+</body>
+</html>
